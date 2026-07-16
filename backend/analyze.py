@@ -55,14 +55,22 @@ def _module_of(path: str) -> str:
 
 
 def cluster_eras(commits: List[CommitRecord], min_cluster_size: int = 3) -> dict:
-    """Group commits by top-level module + rough time window. This is a
-    cheap local pass; the LLM later decides which clusters are actually
-    meaningful architectural eras worth narrating."""
+    """Group commits by top-level module. Each commit is assigned to its
+    *dominant* module (the one with the most files changed) rather than
+    every module it touched. This prevents cross-cutting changes (e.g.
+    async support landing in src/, docs/, and tests/ simultaneously) from
+    generating duplicate findings for each folder."""
     by_module: dict[str, List[CommitRecord]] = defaultdict(list)
     for c in commits:
-        modules = {_module_of(f) for f in c.files_changed} or {"root"}
-        for m in modules:
-            by_module[m].append(c)
+        if not c.files_changed:
+            by_module["root"].append(c)
+            continue
+        # Count touched files per top-level module; assign to the plurality.
+        module_counts: dict[str, int] = defaultdict(int)
+        for f in c.files_changed:
+            module_counts[_module_of(f)] += 1
+        primary = max(module_counts, key=lambda m: module_counts[m])
+        by_module[primary].append(c)
 
     clusters = {
         module: sorted(cs, key=lambda c: c.date)
