@@ -24,9 +24,15 @@ from openai import OpenAI
 from ingest import RepoCorpus, CommitRecord
 from models import Evidence, Finding, FindingType
 
-MODEL = os.getenv("CODICEL_MODEL", "gpt-5.6")
+MODEL = os.getenv("CODICEL_MODEL", "gpt-4o")
 
-client = OpenAI()  # reads OPENAI_API_KEY from environment
+_client: OpenAI | None = None
+
+def _get_client() -> OpenAI:
+    global _client
+    if _client is None:
+        _client = OpenAI()  # reads OPENAI_API_KEY from environment
+    return _client
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +166,7 @@ def narrate_eras(clusters: dict) -> List[Finding]:
     findings: List[Finding] = []
     for module, commits in clusters.items():
         try:
-            resp = client.chat.completions.create(
+            resp = _get_client().chat.completions.create(
                 model=MODEL,
                 messages=[
                     {"role": "system", "content": _SYSTEM_PROMPT},
@@ -232,7 +238,7 @@ def narrate_dead_code(candidates: List[dict], commits: List[CommitRecord]) -> Li
     if not candidates:
         return []
     try:
-        resp = client.chat.completions.create(
+        resp = _get_client().chat.completions.create(
             model=MODEL,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
