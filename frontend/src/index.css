@@ -87,6 +87,10 @@ html, body {
   outline-offset: 1px;
 }
 
+.repo-form input:disabled {
+  opacity: 0.6;
+}
+
 .repo-form button {
   font-family: var(--font-body);
   font-weight: 600;
@@ -98,10 +102,30 @@ html, body {
   border-radius: 3px;
   cursor: pointer;
   transition: background 0.15s ease;
+  white-space: nowrap;
 }
 
 .repo-form button:hover:not(:disabled) { background: var(--wax-bright); }
 .repo-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-cancel {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 14px 24px;
+  background: transparent !important;
+  color: var(--ink-soft) !important;
+  border: 1px solid var(--rule) !important;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.btn-cancel:hover {
+  border-color: var(--wax) !important;
+  color: var(--wax) !important;
+}
 
 /* --- Progress --- */
 
@@ -137,8 +161,9 @@ html, body {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--ink-soft);
-  margin-bottom: 48px;
+  margin-bottom: 32px;
   flex-wrap: wrap;
+  align-items: flex-end;
 }
 
 .stats-strip strong {
@@ -146,6 +171,63 @@ html, body {
   font-size: 20px;
   display: block;
   font-family: var(--font-display);
+}
+
+.btn-new-excavation {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 14px;
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btn-new-excavation:hover {
+  border-color: var(--wax);
+  color: var(--wax);
+}
+
+/* --- Filter bar --- */
+
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 28px;
+}
+
+.filter-btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 14px;
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-btn:hover {
+  border-color: var(--brass);
+  color: var(--ink);
+}
+
+.filter-btn.active {
+  background: var(--wax);
+  border-color: var(--wax);
+  color: var(--paper);
+}
+
+.filter-count {
+  font-size: 11px;
+  opacity: 0.7;
 }
 
 /* --- Ledger timeline --- */
@@ -256,11 +338,31 @@ html, body {
 
 /* --- Empty / error states --- */
 
-.empty-state, .error-state {
+.empty-state {
   text-align: center;
   padding: 60px 20px;
   color: var(--ink-soft);
   font-family: var(--font-body);
 }
 
-.error-state { color: var(--wax); }
+.empty-state p {
+  margin: 0 0 8px;
+}
+
+.empty-state-hint {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.error-state {
+  text-align: center;
+  padding: 24px 20px;
+  color: var(--wax);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--paper-deep);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--wax);
+  border-radius: 3px;
+  margin-bottom: 24px;
+}

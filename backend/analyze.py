@@ -15,9 +15,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import uuid
 from collections import defaultdict
-from typing import List
+from typing import List, Optional
 
 from openai import OpenAI
 
@@ -32,10 +33,8 @@ MODEL = os.getenv("CODICEL_MODEL", "gpt-5.6")
 # in .env to point this at Groq while OpenAI billing isn't set up yet, then
 # switch both back to OpenAI's defaults before the final demo, since the
 # hackathon rules score how GPT-5.6 specifically was used.
-_api_base = os.getenv("CODICEL_API_BASE")  # e.g. https://api.groq.com/openai/v1
-_api_key = os.getenv("CODICEL_API_KEY") or os.getenv("OPENAI_API_KEY")
-
 _client: OpenAI | None = None
+
 
 def _get_client() -> OpenAI:
     global _client
@@ -74,15 +73,23 @@ def cluster_eras(commits: List[CommitRecord], min_cluster_size: int = 3) -> dict
 
 
 # ---------------------------------------------------------------------------
-# Step 2: static dead-code candidate detection (cheap, local, language-agnostic-ish)
+# Step 2: static dead-code candidate detection (cheap, local, multi-language)
 # ---------------------------------------------------------------------------
 
 _DEF_PATTERNS = [
-    re.compile(r"^\s*def\s+(\w+)\s*\("),          # python
-    re.compile(r"^\s*function\s+(\w+)\s*\("),      # js
-    re.compile(r"^\s*export\s+function\s+(\w+)\s*\("),
-    re.compile(r"^\s*(?:public|private|protected)?\s*(?:static\s+)?\w[\w<>\[\]]*\s+(\w+)\s*\("),  # java/c#-ish
+    re.compile(r"^\s*def\s+(\w+)\s*\("),                           # Python / Ruby
+    re.compile(r"^\s*function\s+(\w+)\s*\("),                      # JS/TS (plain)
+    re.compile(r"^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\("),  # JS/TS (export/async)
+    re.compile(r"^\s*(?:public|private|protected|internal)?\s*(?:static\s+)?(?:async\s+)?\w[\w<>\[\]]*\s+(\w+)\s*\("),  # Java / C#
+    re.compile(r"^\s*fn\s+(\w+)\s*[(<]"),                          # Rust
+    re.compile(r"^\s*func\s+(\w+)\s*\("),                          # Go / Swift
+    re.compile(r"^\s*fun\s+(\w+)\s*\("),                           # Kotlin
 ]
+
+_CODE_EXTENSIONS = (
+    ".py", ".js", ".ts", ".jsx", ".tsx",
+    ".java", ".go", ".rb", ".rs", ".swift", ".kt", ".cs",
+)
 
 
 def find_dead_code_candidates(local_path: str, file_index: List[str], sample_limit: int = 400) -> List[dict]:
@@ -94,7 +101,7 @@ def find_dead_code_candidates(local_path: str, file_index: List[str], sample_lim
     candidates = []
     code_files = [
         f for f in file_index
-        if f.endswith((".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".rb"))
+        if f.endswith(_CODE_EXTENSIONS)
     ][:sample_limit]
 
     definitions: dict[str, str] = {}  # name -> defining file
@@ -173,9 +180,11 @@ return {{"eras": []}}.
 """
 
 
-def narrate_eras(clusters: dict) -> List[Finding]:
+def narrate_eras(clusters: dict, cancel: Optional[threading.Event] = None) -> List[Finding]:
     findings: List[Finding] = []
     for module, commits in clusters.items():
+        if cancel and cancel.is_set():
+            break
         try:
             resp = _get_client().chat.completions.create(
                 model=MODEL,
@@ -186,7 +195,7 @@ def narrate_eras(clusters: dict) -> List[Finding]:
                 response_format={"type": "json_object"},
             )
             data = json.loads(resp.choices[0].message.content)
-        except Exception as e:
+        except Exception:
             # Demo resilience: one module's failure shouldn't kill the run.
             continue
 
@@ -284,9 +293,12 @@ def narrate_dead_code(candidates: List[dict], commits: List[CommitRecord]) -> Li
     return findings
 
 
-def run_full_analysis(corpus: RepoCorpus) -> List[Finding]:
+def run_full_analysis(corpus: RepoCorpus, cancel: Optional[threading.Event] = None) -> List[Finding]:
     clusters = cluster_eras(corpus.commits)
-    era_findings = narrate_eras(clusters)
+    era_findings = narrate_eras(clusters, cancel)
+
+    if cancel and cancel.is_set():
+        return era_findings
 
     dead_candidates = find_dead_code_candidates(corpus.local_path, corpus.file_index)
     dead_findings = narrate_dead_code(dead_candidates, corpus.commits)
