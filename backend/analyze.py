@@ -1,0 +1,277 @@
+"""
+The reasoning core of Codicel.
+
+Design principle: the LLM is only allowed to make claims that are anchored
+to evidence we hand it. We don't ask "what happened in this repo's
+history" as an open question. Instead we pre-cluster commits into candidate
+"eras" and pre-detect dead-code candidates with plain static analysis
+first, and only ask the model to *narrate and explain* those grounded
+signals. This keeps hallucination risk down and keeps every Finding
+traceable to a real commit/file, which is what the demo needs to be
+credible to judges.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import uuid
+from collections import defaultdict
+from typing import List
+
+from openai import OpenAI
+
+from ingest import RepoCorpus, CommitRecord
+from models import Evidence, Finding, FindingType
+
+MODEL = os.getenv("CODICEL_MODEL", "gpt-5.6")
+
+client = OpenAI()  # reads OPENAI_API_KEY from environment
+
+
+# ---------------------------------------------------------------------------
+# Step 1: cluster commits into candidate "eras" per module (cheap, local)
+# ---------------------------------------------------------------------------
+
+def _module_of(path: str) -> str:
+    parts = path.split("/")
+    return parts[0] if len(parts) > 1 else "root"
+
+
+def cluster_eras(commits: List[CommitRecord], min_cluster_size: int = 3) -> dict:
+    """Group commits by top-level module + rough time window. This is a
+    cheap local pass; the LLM later decides which clusters are actually
+    meaningful architectural eras worth narrating."""
+    by_module: dict[str, List[CommitRecord]] = defaultdict(list)
+    for c in commits:
+        modules = {_module_of(f) for f in c.files_changed} or {"root"}
+        for m in modules:
+            by_module[m].append(c)
+
+    clusters = {
+        module: sorted(cs, key=lambda c: c.date)
+        for module, cs in by_module.items()
+        if len(cs) >= min_cluster_size
+    }
+    return clusters
+
+
+# ---------------------------------------------------------------------------
+# Step 2: static dead-code candidate detection (cheap, local, language-agnostic-ish)
+# ---------------------------------------------------------------------------
+
+_DEF_PATTERNS = [
+    re.compile(r"^\s*def\s+(\w+)\s*\("),          # python
+    re.compile(r"^\s*function\s+(\w+)\s*\("),      # js
+    re.compile(r"^\s*export\s+function\s+(\w+)\s*\("),
+    re.compile(r"^\s*(?:public|private|protected)?\s*(?:static\s+)?\w[\w<>\[\]]*\s+(\w+)\s*\("),  # java/c#-ish
+]
+
+
+def find_dead_code_candidates(local_path: str, file_index: List[str], sample_limit: int = 400) -> List[dict]:
+    """Very intentionally simple: find top-level function/method definitions,
+    then grep the rest of the tree for references. Anything defined once and
+    referenced zero times outside its own file is a candidate. This is a
+    heuristic pre-filter. The LLM pass explains *why* each candidate looks
+    abandoned, using the commit history, and can discard false positives."""
+    candidates = []
+    code_files = [
+        f for f in file_index
+        if f.endswith((".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".rb"))
+    ][:sample_limit]
+
+    definitions: dict[str, str] = {}  # name -> defining file
+    file_contents: dict[str, str] = {}
+
+    for rel_path in code_files:
+        abs_path = os.path.join(local_path, rel_path)
+        try:
+            with open(abs_path, "r", errors="ignore") as fh:
+                content = fh.read()
+        except OSError:
+            continue
+        file_contents[rel_path] = content
+        for line in content.splitlines():
+            for pattern in _DEF_PATTERNS:
+                m = pattern.match(line)
+                if m:
+                    name = m.group(1)
+                    if len(name) > 3 and not name.startswith("_"):
+                        definitions.setdefault(name, rel_path)
+
+    for name, def_file in definitions.items():
+        ref_count = 0
+        for rel_path, content in file_contents.items():
+            if rel_path == def_file:
+                continue
+            ref_count += content.count(name)
+        if ref_count == 0:
+            candidates.append({"name": name, "file": def_file})
+
+    return candidates
+
+
+# ---------------------------------------------------------------------------
+# Step 3: LLM narration. Turns grounded clusters/candidates into Findings
+# ---------------------------------------------------------------------------
+
+_SYSTEM_PROMPT = """You are Codicel's reasoning core: a software archaeologist.
+You are given real evidence extracted from a git repository: commit
+clusters and dead-code candidates. Your job is to explain what likely
+happened and why, grounded ONLY in the evidence provided.
+
+Rules:
+- Never invent a commit sha, PR number, file path, or date that isn't in
+  the evidence you were given.
+- If the evidence is too thin to explain confidently, say so with a lower
+  confidence score rather than inventing a story.
+- Write narratives the way a senior engineer would explain repo history to
+  a new hire: concrete, causal, no fluff.
+- Output strict JSON matching the requested schema. No prose outside JSON.
+"""
+
+
+def _era_prompt(module: str, commits: List[CommitRecord]) -> str:
+    commit_lines = "\n".join(
+        f"- sha={c.sha[:10]} date={c.date} msg={c.message[:140]!r} files={c.files_changed[:6]}"
+        for c in commits[:40]  # cap tokens per module
+    )
+    return f"""Module: {module}
+Commits (chronological):
+{commit_lines}
+
+Task: Identify 0-2 distinct architectural "eras" or decisions in this
+module's history (e.g. a rewrite, a migration, a new dependency adopted,
+a pattern abandoned). For each era, return:
+{{
+  "title": short label,
+  "narrative": 2-4 sentences explaining what changed and why, grounded in
+     the commit messages shown,
+  "confidence": 0.0-1.0,
+  "date_range": "YYYY-MM-DD to YYYY-MM-DD",
+  "evidence_shas": [list of the specific commit shas above that support this]
+}}
+Return a JSON object: {{"eras": [...]}}. If nothing meaningful stands out,
+return {{"eras": []}}.
+"""
+
+
+def narrate_eras(clusters: dict) -> List[Finding]:
+    findings: List[Finding] = []
+    for module, commits in clusters.items():
+        try:
+            resp = client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "user", "content": _era_prompt(module, commits)},
+                ],
+                response_format={"type": "json_object"},
+            )
+            data = json.loads(resp.choices[0].message.content)
+        except Exception as e:
+            # Demo resilience: one module's failure shouldn't kill the run.
+            continue
+
+        sha_lookup = {c.sha[:10]: c for c in commits}
+        for era in data.get("eras", []):
+            evidence = [
+                Evidence(
+                    commit_sha=sha_lookup[sha].sha,
+                    commit_message=sha_lookup[sha].message,
+                    date=sha_lookup[sha].date,
+                    file_path=None,
+                )
+                for sha in era.get("evidence_shas", [])
+                if sha in sha_lookup
+            ]
+            if not evidence:
+                continue  # never emit an ungrounded finding
+            findings.append(
+                Finding(
+                    id=str(uuid.uuid4()),
+                    type=FindingType.ERA,
+                    title=era.get("title", f"{module} changes"),
+                    narrative=era.get("narrative", ""),
+                    confidence=float(era.get("confidence", 0.5)),
+                    module=module,
+                    date_range=era.get("date_range"),
+                    evidence=evidence,
+                )
+            )
+    return findings
+
+
+def _dead_code_prompt(candidates: List[dict], commits: List[CommitRecord]) -> str:
+    cand_lines = "\n".join(f"- {c['name']} in {c['file']}" for c in candidates[:60])
+    # Give the model a small window of commit messages for context on intent.
+    recent_msgs = "\n".join(f"- {c.message[:120]!r}" for c in commits[:80])
+    return f"""Unreferenced-elsewhere function/method candidates (heuristic
+pre-filter. May include false positives like framework entry points,
+test fixtures, or dynamically-invoked code; use judgment):
+{cand_lines}
+
+Recent commit messages for context:
+{recent_msgs}
+
+Task: For each candidate that plausibly represents genuinely abandoned or
+forgotten code (not a false positive), return:
+{{
+  "name": ..., "file": ...,
+  "narrative": "1-3 sentences on what it was likely for and why it looks abandoned",
+  "confidence": 0.0-1.0,
+  "likely_false_positive": true/false
+}}
+Return {{"findings": [...]}}. Omit candidates you judge to be false
+positives (or include them with likely_false_positive=true and low
+confidence, but Codicel will discard those before showing users).
+"""
+
+
+def narrate_dead_code(candidates: List[dict], commits: List[CommitRecord]) -> List[Finding]:
+    if not candidates:
+        return []
+    try:
+        resp = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": _dead_code_prompt(candidates, commits)},
+            ],
+            response_format={"type": "json_object"},
+        )
+        data = json.loads(resp.choices[0].message.content)
+    except Exception:
+        return []
+
+    cand_lookup = {c["name"]: c for c in candidates}
+    findings: List[Finding] = []
+    for item in data.get("findings", []):
+        if item.get("likely_false_positive"):
+            continue
+        name = item.get("name")
+        cand = cand_lookup.get(name)
+        if not cand:
+            continue
+        findings.append(
+            Finding(
+                id=str(uuid.uuid4()),
+                type=FindingType.DEAD_CODE,
+                title=f"{name}() looks abandoned",
+                narrative=item.get("narrative", ""),
+                confidence=float(item.get("confidence", 0.4)),
+                module=_module_of(cand["file"]),
+                evidence=[Evidence(file_path=cand["file"])],
+            )
+        )
+    return findings
+
+
+def run_full_analysis(corpus: RepoCorpus) -> List[Finding]:
+    clusters = cluster_eras(corpus.commits)
+    era_findings = narrate_eras(clusters)
+
+    dead_candidates = find_dead_code_candidates(corpus.local_path, corpus.file_index)
+    dead_findings = narrate_dead_code(dead_candidates, corpus.commits)
+
+    return era_findings + dead_findings

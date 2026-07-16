@@ -1,0 +1,266 @@
+:root {
+  /* --- Codicel token system --- */
+  --paper: #F1EADA;
+  --paper-deep: #E7DCC4;
+  --ink: #241E19;
+  --ink-soft: #59503F;
+  --wax: #8A2E1F;
+  --wax-bright: #B23F26;
+  --brass: #A5793A;
+  --moss: #4B5842;
+  --rule: #C9BB9C;
+
+  --font-display: 'Fraunces', serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 48px 24px 96px;
+}
+
+/* --- Header --- */
+
+.masthead {
+  text-align: center;
+  margin-bottom: 56px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.masthead .wordmark {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-optical-sizing: auto;
+  font-size: 56px;
+  letter-spacing: 0.5px;
+  margin: 0;
+  color: var(--ink);
+}
+
+.masthead .tagline {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--wax);
+  margin-top: 8px;
+}
+
+/* --- Repo form --- */
+
+.repo-form {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 40px;
+}
+
+.repo-form input {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  background: var(--paper-deep);
+  color: var(--ink);
+  border-radius: 3px;
+}
+
+.repo-form input:focus {
+  outline: 2px solid var(--wax);
+  outline-offset: 1px;
+}
+
+.repo-form button {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 14px 24px;
+  background: var(--wax);
+  color: var(--paper);
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.repo-form button:hover:not(:disabled) { background: var(--wax-bright); }
+.repo-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* --- Progress --- */
+
+.progress-block {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-bottom: 40px;
+  padding: 16px 20px;
+  border-left: 3px solid var(--brass);
+  background: var(--paper-deep);
+}
+
+.progress-bar-track {
+  height: 4px;
+  background: var(--rule);
+  margin-top: 10px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--brass);
+  transition: width 0.4s ease;
+}
+
+/* --- Stats strip --- */
+
+.stats-strip {
+  display: flex;
+  gap: 32px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-bottom: 48px;
+  flex-wrap: wrap;
+}
+
+.stats-strip strong {
+  color: var(--ink);
+  font-size: 20px;
+  display: block;
+  font-family: var(--font-display);
+}
+
+/* --- Ledger timeline --- */
+
+.ledger {
+  position: relative;
+  padding-left: 32px;
+}
+
+.ledger::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: repeating-linear-gradient(
+    to bottom, var(--rule) 0, var(--rule) 4px, transparent 4px, transparent 9px
+  );
+}
+
+.entry {
+  position: relative;
+  margin-bottom: 36px;
+  background: var(--paper-deep);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 20px 24px;
+}
+
+.entry::before {
+  content: '';
+  position: absolute;
+  left: -32px;
+  top: 24px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--wax);
+  border: 2px solid var(--paper);
+}
+
+.entry-type {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--brass);
+  margin-bottom: 6px;
+}
+
+.entry-type.dead_code { color: var(--moss); }
+
+.entry-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  margin: 0 0 10px;
+  color: var(--ink);
+}
+
+.entry-narrative {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  margin-bottom: 14px;
+}
+
+.entry-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* --- Evidence stamp: the signature element --- */
+
+.stamp-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid var(--brass);
+  border-radius: 999px;
+  color: var(--brass);
+  background: transparent;
+}
+
+.stamp::before {
+  content: '◆';
+  font-size: 8px;
+}
+
+.confidence-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+/* --- Empty / error states --- */
+
+.empty-state, .error-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+}
+
+.error-state { color: var(--wax); }
