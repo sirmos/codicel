@@ -72,3 +72,16 @@ class AnalysisResult(BaseModel):
     generated_at: str
     findings: List[Finding]
     stats: dict
+
+
+class ChatRequest(BaseModel):
+    question: str
+
+
+class ChatMessage(BaseModel):
+    role: str   # "user" | "assistant"
+    content: str
+
+
+class ChatResponse(BaseModel):
+    answer: str

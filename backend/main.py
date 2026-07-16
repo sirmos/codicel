@@ -20,8 +20,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from ingest import build_corpus, cleanup_corpus
-from analyze import run_full_analysis
-from models import AnalyzeRequest, AnalysisResult, JobProgress, JobStatus
+from analyze import run_full_analysis, ask_archive
+from models import AnalyzeRequest, AnalysisResult, JobProgress, JobStatus, ChatRequest
 
 app = FastAPI(title="Codicel API")
 
@@ -148,6 +148,18 @@ def result(job_id: str) -> AnalysisResult:
     if job_id not in RESULTS:
         raise HTTPException(404, "Result not ready")
     return RESULTS[job_id]
+
+
+@app.post("/chat/{job_id}")
+def chat(job_id: str, req: ChatRequest) -> dict:
+    if job_id not in RESULTS:
+        raise HTTPException(404, "No excavation found for this job — run an analysis first")
+    result = RESULTS[job_id]
+    try:
+        answer = ask_archive(result, req.question)
+        return {"answer": answer}
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 @app.get("/health")

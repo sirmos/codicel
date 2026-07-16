@@ -23,7 +23,7 @@ from typing import List, Optional
 from openai import OpenAI
 
 from ingest import RepoCorpus, CommitRecord
-from models import Evidence, Finding, FindingType
+from models import Evidence, Finding, FindingType, AnalysisResult
 
 MODEL = os.getenv("CODICEL_MODEL", "gpt-5.6")
 
@@ -299,6 +299,68 @@ def narrate_dead_code(candidates: List[dict], commits: List[CommitRecord]) -> Li
             )
         )
     return findings
+
+
+def ask_archive(result: AnalysisResult, question: str) -> str:
+    """Answer a natural-language question about the repo's history using
+    the excavated findings as the only knowledge base. GPT-5.6 is explicitly
+    prohibited from inventing commits, files, or dates not in the evidence."""
+    repo_base = result.repo_url.rstrip("/").removesuffix(".git")
+    lines: List[str] = [
+        f"Repository: {result.repo_url}",
+        f"Analyzed: {result.generated_at}",
+        f"Commits read: {result.stats.get('commits_analyzed', '?')}",
+        f"Files indexed: {result.stats.get('files_in_tree', '?')}",
+        f"Findings: {len(result.findings)}",
+        "",
+    ]
+    for f in result.findings:
+        lines.append(f"## {f.title} [{f.type}]")
+        if f.module:
+            lines.append(f"Module: {f.module}")
+        if f.date_range:
+            lines.append(f"Period: {f.date_range}")
+        lines.append(f"Confidence: {round(f.confidence * 100)}%")
+        lines.append(f"Narrative: {f.narrative}")
+        if f.evidence:
+            lines.append("Evidence:")
+            for e in f.evidence:
+                if e.commit_sha:
+                    msg = (e.commit_message or "").split("\n")[0][:120]
+                    lines.append(f"  - commit {e.commit_sha[:10]} ({e.date or ''}): {msg}")
+                    lines.append(f"    link: {repo_base}/commit/{e.commit_sha}")
+                elif e.file_path:
+                    lines.append(f"  - file: {e.file_path}")
+        lines.append("")
+
+    context = "\n".join(lines)
+
+    resp = _get_client().chat.completions.create(
+        model=MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are the Codicel archive assistant — a software archaeologist.\n"
+                    "You have access to an excavation report for a git repository: "
+                    "findings about architectural decisions and abandoned code, each "
+                    "backed by real commit evidence.\n\n"
+                    "Rules:\n"
+                    "- Answer ONLY from the findings provided. Never invent a commit "
+                    "SHA, file path, date, or decision that is not in the report.\n"
+                    "- If the answer is not in the findings, say so clearly.\n"
+                    "- When evidence supports your answer, cite the commit SHA or file.\n"
+                    "- Write like a senior engineer explaining history to a colleague: "
+                    "direct, concrete, no filler."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"Excavation report:\n\n{context}\n\nQuestion: {question}",
+            },
+        ],
+    )
+    return resp.choices[0].message.content
 
 
 def run_full_analysis(corpus: RepoCorpus, cancel: Optional[threading.Event] = None) -> List[Finding]:
