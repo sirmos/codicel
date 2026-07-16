@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import Ledger from './components/Ledger.jsx'
 import AskArchive from './components/AskArchive.jsx'
 
-const API_BASE = '/api'
+const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 const LS_JOB_KEY = 'codicel_job_id'
 const LS_RESULT_KEY = 'codicel_result'
 
