@@ -24,14 +24,25 @@ from openai import OpenAI
 from ingest import RepoCorpus, CommitRecord
 from models import Evidence, Finding, FindingType
 
-MODEL = os.getenv("CODICEL_MODEL", "gpt-4o")
+MODEL = os.getenv("CODICEL_MODEL", "gpt-5.6")
+
+# Groq's API speaks the same format as OpenAI's, so switching between them
+# is just a matter of pointing the client at a different base_url and using
+# a different key and model name. Set CODICEL_API_BASE and CODICEL_API_KEY
+# in .env to point this at Groq while OpenAI billing isn't set up yet, then
+# switch both back to OpenAI's defaults before the final demo, since the
+# hackathon rules score how GPT-5.6 specifically was used.
+_api_base = os.getenv("CODICEL_API_BASE")  # e.g. https://api.groq.com/openai/v1
+_api_key = os.getenv("CODICEL_API_KEY") or os.getenv("OPENAI_API_KEY")
 
 _client: OpenAI | None = None
 
 def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        _client = OpenAI()  # reads OPENAI_API_KEY from environment
+        api_base = os.getenv("CODICEL_API_BASE")
+        api_key = os.getenv("CODICEL_API_KEY") or os.getenv("OPENAI_API_KEY")
+        _client = OpenAI(api_key=api_key, base_url=api_base) if api_base else OpenAI(api_key=api_key)
     return _client
 
 
