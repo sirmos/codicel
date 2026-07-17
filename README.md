@@ -2,6 +2,8 @@
 
 > *An amended record of what this repository became, and why.*
 
+**Live demo:** https://frontend-57n9.onrender.com
+
 Codicel reads a GitHub repository's full commit history and tells you what happened inside it — the big architectural decisions, the code that got built and forgotten, and the turning points that shaped the codebase. Every claim is anchored to a real commit. Nothing gets said without proof.
 
 Then it lets you **talk to that history** — ask GPT-5.6 any question about the repo's past and get a grounded answer backed by the same evidence.
