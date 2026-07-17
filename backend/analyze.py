@@ -18,6 +18,7 @@ import re
 import threading
 import uuid
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional
 
 from openai import OpenAI
@@ -189,10 +190,15 @@ return {{"eras": []}}.
 
 
 def narrate_eras(clusters: dict, cancel: Optional[threading.Event] = None) -> List[Finding]:
-    findings: List[Finding] = []
-    for module, commits in clusters.items():
+    # Focus on the top 15 modules by commit volume — large repos can have
+    # 50+ top-level dirs and processing all of them sequentially is the
+    # second biggest source of latency after commit extraction.
+    MAX_MODULES = 15
+    ranked = sorted(clusters.items(), key=lambda kv: len(kv[1]), reverse=True)[:MAX_MODULES]
+
+    def _narrate_one(module: str, commits: List[CommitRecord]) -> List[Finding]:
         if cancel and cancel.is_set():
-            break
+            return []
         try:
             resp = _get_client().chat.completions.create(
                 model=MODEL,
@@ -204,10 +210,10 @@ def narrate_eras(clusters: dict, cancel: Optional[threading.Event] = None) -> Li
             )
             data = json.loads(resp.choices[0].message.content)
         except Exception:
-            # Demo resilience: one module's failure shouldn't kill the run.
-            continue
+            return []
 
         sha_lookup = {c.sha[:10]: c for c in commits}
+        module_findings: List[Finding] = []
         for era in data.get("eras", []):
             evidence = [
                 Evidence(
@@ -221,7 +227,7 @@ def narrate_eras(clusters: dict, cancel: Optional[threading.Event] = None) -> Li
             ]
             if not evidence:
                 continue  # never emit an ungrounded finding
-            findings.append(
+            module_findings.append(
                 Finding(
                     id=str(uuid.uuid4()),
                     type=FindingType.ERA,
@@ -233,6 +239,25 @@ def narrate_eras(clusters: dict, cancel: Optional[threading.Event] = None) -> Li
                     evidence=evidence,
                 )
             )
+        return module_findings
+
+    findings: List[Finding] = []
+    # Fire all module LLM calls concurrently instead of one-at-a-time.
+    # 5 workers keeps total concurrent requests reasonable without hammering
+    # the API rate limit.
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {
+            executor.submit(_narrate_one, module, commits): module
+            for module, commits in ranked
+        }
+        for future in as_completed(futures):
+            if cancel and cancel.is_set():
+                break
+            try:
+                findings.extend(future.result())
+            except Exception:
+                pass
+
     return findings
 
 
