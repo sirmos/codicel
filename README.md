@@ -1,12 +1,12 @@
-# Codicel — Software Archaeology powered by GPT-5.6
+# Codicel | Software Archaeology powered by GPT-5.6
 
 > *An amended record of what this repository became, and why.*
 
 **Live demo:** https://frontend-57n9.onrender.com
 
-Codicel reads a GitHub repository's full commit history and tells you what happened inside it — the big architectural decisions, the code that got built and forgotten, and the turning points that shaped the codebase. Every claim is anchored to a real commit. Nothing gets said without proof.
+Codicel reads a GitHub repository's full commit history and tells you what happened inside it - the big architectural decisions, the code that got built and forgotten, and the turning points that shaped the codebase. Every claim is anchored to a real commit. Nothing gets said without proof.
 
-Then it lets you **talk to that history** — ask GPT-5.6 any question about the repo's past and get a grounded answer backed by the same evidence.
+Then it lets you **talk to that history** - ask GPT-5.6 any question about the repo's past and get a grounded answer backed by the same evidence.
 
 Built with GPT-5.6 and Codex for [OpenAI Build Week](https://devpost.com/software/codicel).
 
@@ -14,7 +14,7 @@ Built with GPT-5.6 and Codex for [OpenAI Build Week](https://devpost.com/softwar
 
 ## The problem
 
-Old codebases are hard to understand. The people who made the big decisions are often gone. Nothing got written down. The only way to find out "why is this built this way?" is to dig through thousands of commits by hand — or ask around and hope someone remembers.
+Old codebases are hard to understand. The people who made the big decisions are often gone. Nothing got written down. The only way to find out "why is this built this way?" is to dig through thousands of commits by hand - or ask around and hope someone remembers.
 
 The history already has the answer. It's just scattered across thousands of commits.
 
@@ -22,30 +22,30 @@ The history already has the answer. It's just scattered across thousands of comm
 
 ## What Codicel does
 
-**1. Excavate** — Paste any public GitHub URL. Codicel clones the repo and reads its full commit history. It clusters commits into architectural eras by module and runs static analysis to find unreferenced code — all without any AI.
+**1. Excavate** - Paste any public GitHub URL. Codicel clones the repo and reads its full commit history. It clusters commits into architectural eras by module and runs static analysis to find unreferenced code - all without any AI.
 
-**2. Narrate** — GPT-5.6 explains what each cluster means: what changed, why it likely happened, and what got left behind. Every finding is grounded — if there's no real commit or file attached to it, it gets dropped before it ever reaches the screen.
+**2. Narrate** - GPT-5.6 explains what each cluster means: what changed, why it likely happened, and what got left behind. Every finding is grounded - if there's no real commit or file attached to it, it gets dropped before it ever reaches the screen.
 
-**3. Ask the Archive** — After excavation, ask any natural-language question about the repo's past. "Why was the auth system rewritten?" "What happened to the WebSocket module?" "How did testing evolve?" GPT-5.6 answers from the evidence, not from guesswork.
+**3. Ask the Archive** - After excavation, ask any natural-language question about the repo's past. "Why was the auth system rewritten?" "What happened to the WebSocket module?" "How did testing evolve?" GPT-5.6 answers from the evidence, not from guesswork.
 
 ---
 
 ## How GPT-5.6 and Codex are used
 
-### GPT-5.6 (reasoning engine — `backend/analyze.py`)
+### GPT-5.6 (reasoning engine - `backend/analyze.py`)
 
-- **`narrate_eras()`** — Feeds GPT-5.6 chronological commit clusters per module and asks it to identify and narrate architectural decisions, grounded only in the commits shown. Returns structured JSON with evidence SHAs.
-- **`narrate_dead_code()`** — Sends unreferenced function candidates (found by static analysis) to GPT-5.6 to distinguish genuine dead code from false positives (framework hooks, dynamically-invoked code, test fixtures). Anything flagged as a likely false positive is discarded.
-- **`ask_archive()`** — Powers the "Ask the Archive" conversational feature. GPT-5.6 answers natural-language questions about the repo's history using the excavated findings as its only knowledge base. The system prompt explicitly prohibits inventing commits, files, or dates not in the evidence.
+- **`narrate_eras()`** - Feeds GPT-5.6 chronological commit clusters per module and asks it to identify and narrate architectural decisions, grounded only in the commits shown. Returns structured JSON with evidence SHAs.
+- **`narrate_dead_code()`** - Sends unreferenced function candidates (found by static analysis) to GPT-5.6 to distinguish genuine dead code from false positives (framework hooks, dynamically-invoked code, test fixtures). Anything flagged as a likely false positive is discarded.
+- **`ask_archive()`** - Powers the "Ask the Archive" conversational feature. GPT-5.6 answers natural-language questions about the repo's history using the excavated findings as its only knowledge base. The system prompt explicitly prohibits inventing commits, files, or dates not in the evidence.
 
 ### Codex (built the entire project)
 
 Codex was used throughout the build:
 - FastAPI backend architecture (`main.py`, `ingest.py`, `analyze.py`, `models.py`)
-- Git ingestion pipeline — cloning, commit extraction, PR fetching via GitHub API
+- Git ingestion pipeline - cloning, commit extraction, PR fetching via GitHub API
 - Commit clustering and dead-code detection logic
 - Evidence validation system (drops any ungrounded finding before it reaches the UI)
-- React frontend — all components, the progress/polling flow, the chat interface
+- React frontend - all components, the progress/polling flow, the chat interface
 - Deduplication fix for cross-module findings (assigns each commit to its dominant module)
 
 ---
@@ -115,7 +115,7 @@ Open `http://localhost:5000`. The Vite dev server proxies `/api/*` → `http://l
 
 ### 4. Try it
 
-Paste a public GitHub URL and click **Excavate**. For the most interesting results, use a repo that's several years old with significant history. Small or very clean repos may surface fewer findings — the accuracy filter is working as intended.
+Paste a public GitHub URL and click **Excavate**. For the most interesting results, use a repo that's several years old with significant history. Small or very clean repos may surface fewer findings - the accuracy filter is working as intended.
 
 After excavation, use **Ask the Archive** to have a conversation with the repo's history.
 
@@ -123,7 +123,7 @@ After excavation, use **Ask the Archive** to have a conversation with the repo's
 
 ## Accuracy guarantee
 
-Every finding shown has at least one real commit SHA or file path behind it. The code drops any ungrounded claim before it reaches the UI — if findings count is lower than expected, that's the filter working, not a bug.
+Every finding shown has at least one real commit SHA or file path behind it. The code drops any ungrounded claim before it reaches the UI - if findings count is lower than expected, that's the filter working, not a bug.
 
 The "Ask the Archive" chat is held to the same standard. GPT-5.6 is explicitly instructed not to invent commits, files, dates, or decisions not present in the findings.
 
@@ -132,6 +132,6 @@ The "Ask the Archive" chat is held to the same standard. GPT-5.6 is explicitly i
 ## Notes for judges
 
 - `CODICEL_MODEL` controls the model. Set to the GPT-5.6 string from your Build Week credits.
-- The cheap work (commit clustering, dead-code regex) runs entirely locally — no AI involved until the narration step.
+- The cheap work (commit clustering, dead-code regex) runs entirely locally - no AI involved until the narration step.
 - Findings survive page refreshes (stored in `localStorage`). The "Ask the Archive" chat requires the backend to be running (job result must still be in memory).
 - For very large repos, the `max_commits` parameter (default 1500) caps ingestion time.
