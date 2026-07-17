@@ -16,8 +16,13 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 load_dotenv()
 
+import logging
+import traceback
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
+logging.basicConfig(level=logging.INFO)
 
 from ingest import build_corpus, cleanup_corpus
 from analyze import run_full_analysis, ask_archive
@@ -152,13 +157,23 @@ def result(job_id: str) -> AnalysisResult:
 
 @app.post("/chat/{job_id}")
 def chat(job_id: str, req: ChatRequest) -> dict:
-    if job_id not in RESULTS:
-        raise HTTPException(404, "No excavation found for this job — run an analysis first")
-    result = RESULTS[job_id]
+    # Prefer in-memory result; fall back to the snapshot the frontend sends.
+    # This makes chat resilient to backend restarts — the frontend always
+    # has the full result in localStorage and sends it with every request.
+    if job_id in RESULTS:
+        result = RESULTS[job_id]
+    elif req.result_snapshot:
+        try:
+            result = AnalysisResult(**req.result_snapshot)
+        except Exception as e:
+            raise HTTPException(400, f"Invalid result snapshot: {e}")
+    else:
+        raise HTTPException(404, "Session expired — please run a new excavation.")
     try:
         answer = ask_archive(result, req.question)
         return {"answer": answer}
     except Exception as e:
+        logging.error("ask_archive failed: %s\n%s", e, traceback.format_exc())
         raise HTTPException(500, str(e))
 
 

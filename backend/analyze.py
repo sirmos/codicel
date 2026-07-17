@@ -194,6 +194,26 @@ return {{"eras": []}}.
 """
 
 
+
+def _extract_json(raw):
+    """Some models (notably Groq's Llama models) wrap JSON replies in
+    markdown code fences even when told not to. This strips that wrapping
+    before parsing, instead of silently failing and skipping the result."""
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                return {}
+        return {}
+
 def narrate_eras(clusters: dict, cancel: Optional[threading.Event] = None) -> List[Finding]:
     # Focus on the top 15 modules by commit volume — large repos can have
     # 50+ top-level dirs and processing all of them sequentially is the
@@ -213,7 +233,7 @@ def narrate_eras(clusters: dict, cancel: Optional[threading.Event] = None) -> Li
                 ],
                 response_format={"type": "json_object"},
             )
-            data = json.loads(resp.choices[0].message.content)
+            data = _extract_json(resp.choices[0].message.content)
         except Exception:
             return []
 
@@ -304,7 +324,7 @@ def narrate_dead_code(candidates: List[dict], commits: List[CommitRecord]) -> Li
             ],
             response_format={"type": "json_object"},
         )
-        data = json.loads(resp.choices[0].message.content)
+        data = _extract_json(resp.choices[0].message.content)
     except Exception:
         return []
 

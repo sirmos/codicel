@@ -76,6 +76,7 @@ class AnalysisResult(BaseModel):
 
 class ChatRequest(BaseModel):
     question: str
+    result_snapshot: Optional[dict] = None  # full AnalysisResult sent by the frontend
 
 
 class ChatMessage(BaseModel):

@@ -10,7 +10,7 @@ const SUGGESTED = [
   'Were there any major rewrites or migrations?',
 ]
 
-export default function AskArchive({ jobId, repoUrl }) {
+export default function AskArchive({ jobId, result }) {
   const [question, setQuestion] = useState('')
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(false)
@@ -33,7 +33,7 @@ export default function AskArchive({ jobId, repoUrl }) {
       const res = await fetch(`${API_BASE}/chat/${jobId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: text }),
+        body: JSON.stringify({ question: text, result_snapshot: result }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -98,11 +98,12 @@ export default function AskArchive({ jobId, repoUrl }) {
               <p className="chat-content chat-thinking">Consulting the record…</p>
             </div>
           )}
-          {error && (
-            <div className="chat-error">{error}</div>
-          )}
           <div ref={bottomRef} />
         </div>
+      )}
+
+      {error && (
+        <div className="chat-error">{error}</div>
       )}
 
       <form

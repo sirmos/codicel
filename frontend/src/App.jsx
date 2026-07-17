@@ -216,9 +216,7 @@ export default function App() {
 
           <Ledger findings={result.findings} repoUrl={result.repo_url} />
 
-          {jobId && (
-            <AskArchive jobId={jobId} repoUrl={result.repo_url} />
-          )}
+          <AskArchive jobId={jobId || 'local'} result={result} />
         </>
       )}
 
