@@ -35,14 +35,16 @@ MODEL = os.getenv("CODICEL_MODEL", "gpt-5.6")
 # switch both back to OpenAI's defaults before the final demo, since the
 # hackathon rules score how GPT-5.6 specifically was used.
 _client: OpenAI | None = None
+_client_lock = threading.Lock()
 
 
 def _get_client() -> OpenAI:
     global _client
-    if _client is None:
-        api_base = os.getenv("CODICEL_API_BASE")
-        api_key = os.getenv("CODICEL_API_KEY") or os.getenv("OPENAI_API_KEY")
-        _client = OpenAI(api_key=api_key, base_url=api_base) if api_base else OpenAI(api_key=api_key)
+    with _client_lock:
+        if _client is None:
+            api_base = os.getenv("CODICEL_API_BASE")
+            api_key = os.getenv("CODICEL_API_KEY") or os.getenv("OPENAI_API_KEY")
+            _client = OpenAI(api_key=api_key, base_url=api_base) if api_base else OpenAI(api_key=api_key)
     return _client
 
 
@@ -111,6 +113,9 @@ def find_dead_code_candidates(local_path: str, file_index: List[str], sample_lim
     code_files = [
         f for f in file_index
         if f.endswith(_CODE_EXTENSIONS)
+        # Git metadata/configuration directories can contain helper scripts,
+        # but they are not part of the analyzed application code.
+        and not any(part.startswith(".") for part in f.split("/"))
     ][:sample_limit]
 
     definitions: dict[str, str] = {}  # name -> defining file
@@ -385,7 +390,10 @@ def ask_archive(result: AnalysisResult, question: str) -> str:
             },
         ],
     )
-    return resp.choices[0].message.content
+    content = resp.choices[0].message.content
+    if content is None:
+        raise ValueError("The model returned an empty response. Try rephrasing your question.")
+    return content
 
 
 def run_full_analysis(corpus: RepoCorpus, cancel: Optional[threading.Event] = None) -> List[Finding]:

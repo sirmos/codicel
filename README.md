@@ -113,6 +113,17 @@ npm run dev
 
 Open `http://localhost:5000`. The Vite dev server proxies `/api/*` → `http://localhost:8000`.
 
+### Run the backend tests
+
+From the repository root, run:
+
+```bash
+python -m unittest backend/test_analyze.py
+```
+
+The suite covers evidence validation, era clustering, and filtering of hidden
+configuration directories from dead-code candidates.
+
 ### 4. Try it
 
 Paste a public GitHub URL and click **Excavate**. For the most interesting results, use a repo that's several years old with significant history. Small or very clean repos may surface fewer findings - the accuracy filter is working as intended.
